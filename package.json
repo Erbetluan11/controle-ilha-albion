@@ -1,0 +1,15 @@
+{
+  "name": "albion-companion",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/core"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @ac/web",
+    "dev:api": "npm run dev -w @ac/api",
+    "build": "npm run build -w @ac/core && npm run build -w @ac/api && npm run build -w @ac/web",
+    "test": "npm test -w @ac/core"
+  }
+}
