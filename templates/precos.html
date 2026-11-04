@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+<div class="card">
+    <h2>Melhores plantações</h2>
+
+    <form method="get">
+        <label>Cidade</label>
+        <select name="cidade">
+            {% for c in cidades %}
+            <option value="{{ c }}" {% if c == cidade %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Atualizar preços</button>
+    </form>
+</div>
+
+<div class="card">
+    <table>
+        <tr>
+            <th>Planta</th>
+            <th>Preço da semente</th>
+            <th>Preço do recurso</th>
+            <th>Rendimento/lote</th>
+            <th>Receita estimada</th>
+            <th>Lucro estimado</th>
+        </tr>
+
+        {% for r in resultados %}
+        <tr>
+            <td>{{ r.nome }}</td>
+            <td>{{ '%.0f'|format(r.semente) }}</td>
+            <td>{{ '%.0f'|format(r.recurso) }}</td>
+            <td>{{ r.rendimento }}</td>
+            <td>{{ '%.0f'|format(r.receita) }}</td>
+            <td class="{{ 'positivo' if r.lucro >= 0 else 'negativo' }}">
+                {{ '%.0f'|format(r.lucro) }}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}
