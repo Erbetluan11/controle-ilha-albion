@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controle da Ilha - Albion Online</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1018;--card:#141d2b;--line:#243247;--muted:#93a3b8;--gold:#efc56b;--ok:#73dfb0;--bad:#ff8798}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#eef3fb;font:15px system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--line);background:#0f1622;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:20px}
+h1 span{color:var(--gold)}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:#1c293b;color:#eef3fb;padding:10px 16px;border-radius:10px}
+button:hover,.btn:hover{background:#2a3b54}
+button.on,button.gold{background:var(--gold);border-color:var(--gold);color:#241d0f;font-weight:700}
+button:disabled{opacity:.5;cursor:default}
+main{max-width:1150px;margin:0 auto;padding:24px}
+section[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:18px}
+.card h2{margin:0 0 14px;font-size:17px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.num{font-size:28px;font-weight:700;margin-top:6px}
+.muted,small{color:var(--muted)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.chart{height:240px;position:relative}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;white-space:nowrap}
+th,td{padding:12px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;color:var(--muted)}
+form{display:grid;gap:12px;max-width:520px}
+label{display:grid;gap:6px;color:var(--muted);font-size:13px}
+input,select{font:inherit;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0c1522;color:#eef3fb;width:100%}
+input:focus,select:focus{outline:2px solid var(--gold)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+.row label{min-width:180px}
+.empty{text-align:center;color:var(--muted);padding:28px}
+.err{color:var(--bad)}
+@media(max-width:800px){.grid3,.grid2{grid-template-columns:1fr}main{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Controle da Ilha <span>Albion</span></h1>
+<nav>
+<button class="on" data-tab="painel">Painel</button>
+<button data-tab="novo">Novo plantio</button>
+<button data-tab="precos">Preços</button>
+<button id="btnExport">Exportar</button>
+<label class="btn" style="display:inline-block">Importar<input id="fileImport" type="file" accept=".json" hidden></label>
+</nav>
+</header>
+<main>
+<section id="painel">
+<div class="grid3">
+<div class="card"><small>Custo das sementes</small><div class="num" id="mCusto">0</div></div>
+<div class="card"><small>Receita das colheitas</small><div class="num" id="mReceita">0</div></div>
+<div class="card"><small>Saldo dos ciclos finalizados</small><div class="num" id="mSaldo">0</div></div>
+</div>
+<div class="grid2">
+<div class="card"><h2>Saldo acumulado</h2><div class="chart"><canvas id="gDia"></canvas></div></div>
+<div class="card"><h2>Saldo por cultura</h2><div class="chart"><canvas id="gCultura"></canvas></div></div>
+</div>
+<div class="card">
+<h2>Meus plantios</h2>
+<div class="scroll"><table><thead><tr><th>Cultura</th><th>Data</th><th>Sementes</th><th>Custo</th><th>Cidade</th><th>Status</th><th>Receita</th><th>Saldo</th><th></th></tr></thead><tbody id="tbody"></tbody></table></div>
+<p><small>O saldo considera receita menos custo das sementes e taxas. Não conta sementes recuperadas nem o valor do foco.</small></p>
+</div>
+</section>
+
+<section id="novo" hidden>
+<div class="card"><h2>Novo plantio</h2>
+<form id="formPlantio">
+<label>Cultura<select id="fCultura"></select></label>
+<label>Quantidade de sementes<input id="fQtd" type="number" min="1" step="1" required></label>
+<label>Custo por semente (pratas)<input id="fCusto" type="number" min="0" step="0.01" required></label>
+<label>Cidade<select id="fCidade"></select></label>
+<button class="gold" type="submit">Salvar plantio</button>
+</form></div>
+</section>
+
+<section id="colheita" hidden>
+<div class="card"><h2 id="hTitulo">Registrar colheita</h2>
+<form id="formColheita">
+<label>Quantidade vendida<input id="cQtd" type="number" min="0" step="1" required></label>
+<label>Preço por unidade<input id="cPreco" type="number" min="0" step="0.01" required></label>
+<label>Taxas totais de venda<input id="cTaxas" type="number" min="0" step="0.01" value="0" required></label>
+<button class="gold" type="submit">Finalizar ciclo</button>
+</form></div>
+</section>
+
+<section id="precos" hidden>
+<div class="card"><h2>Preços de mercado</h2>
+<p class="muted">Dados enviados por jogadores ao Albion Online Data Project. Podem estar desatualizados; confira no jogo antes de comprar ou vender.</p>
+<div class="row">
+<label>Servidor<select id="pServidor"><option value="west">Américas</option><option value="europe">Europa</option><option value="east">Ásia</option></select></label>
+<label>Cidade<select id="pCidade"></select></label>
+<button class="gold" id="btnPrecos" type="button">Consultar</button>
+</div>
+<p id="pStatus" role="status" class="muted">Escolha o servidor e a cidade.</p>
+</div>
+<div class="card scroll"><table><thead><tr><th>Cultura</th><th>Semente (menor venda)</th><th>Produto (menor venda)</th><th>Produto (maior compra)</th><th>Observado em</th></tr></thead><tbody id="pBody"><tr><td colspan="5" class="empty">Nenhuma consulta feita.</td></tr></tbody></table></div>
+<p><small>"Sem dados" não quer dizer preço zero. Observações com mais de 24 horas aparecem como antigas.</small></p>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = v => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+const CIDADES = ['Thetford','Fort Sterling','Lymhurst','Bridgewatch','Martlock','Caerleon','Brecilien'];
+const PLANTAS = [
+  ['Cenoura','T1_CARROT','T1_FARM_CARROT_SEED'],
+  ['Feijão','T2_BEAN','T2_FARM_BEAN_SEED'],
+  ['Trigo','T3_WHEAT','T3_FARM_WHEAT_SEED'],
+  ['Nabo','T4_TURNIP','T4_FARM_TURNIP_SEED'],
+  ['Repolho','T5_CABBAGE','T5_FARM_CABBAGE_SEED'],
+  ['Batata','T6_POTATO','T6_FARM_POTATO_SEED'],
+  ['Milho','T7_CORN','T7_FARM_CORN_SEED'],
+  ['Abóbora','T8_PUMPKIN','T8_FARM_PUMPKIN_SEED']
+];
+let registros = [], atual = null, graficos = [], leituraOk = true;
+try {
+  const a = JSON.parse(localStorage.getItem('plantios') || '[]');
+  if (Array.isArray(a)) registros = a; else leituraOk = false;
+} catch (e) { leituraOk = false; }
+if (!leituraOk) alert('Não foi possível ler os dados salvos. Nada será gravado até você importar um backup.');
+
+function salvar() {
+  if (!leituraOk) return;
+  try { localStorage.setItem('plantios', JSON.stringify(registros)); }
+  catch (e) { alert('Não foi possível salvar. Exporte um backup.'); }
+}
+function saldo(r) { return Number(r.vendido || 0) - Number(r.custoTotal || 0) - Number(r.taxas || 0); }
+function abrir(id) {
+  document.querySelectorAll('main section').forEach(s => s.hidden = s.id !== id);
+  document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+  if (id === 'painel') graficos.forEach(g => g.resize());
+}
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => abrir(b.dataset.tab));
+
+function opcoes(sel, lista) {
+  lista.forEach(t => { const o = document.createElement('option'); o.textContent = t; sel.append(o); });
+}
+opcoes($('fCultura'), PLANTAS.map(p => p[0]));
+opcoes($('fCidade'), CIDADES);
+opcoes($('pCidade'), CIDADES);
+
+function cel(tr, texto, classe) {
+  const td = document.createElement('td');
+  td.textContent = texto;
+  if (classe) td.className = classe;
+  tr.append(td);
+  return td;
+}
+function botao(texto, fn) {
+  const b = document.createElement('button');
+  b.textContent = texto; b.type = 'button'; b.onclick = fn;
+  return b;
+}
+
+function render() {
+  const fin = registros.filter(r => r.finalizado);
+  $('mCusto').textContent = fmt(registros.reduce((s, r) => s + Number(r.custoTotal || 0), 0));
+  $('mReceita').textContent = fmt(fin.reduce((s, r) => s + Number(r.vendido || 0), 0));
+  const total = fin.reduce((s, r) => s + saldo(r), 0);
+  $('mSaldo').textContent = fmt(total);
+  $('mSaldo').className = 'num ' + (total >= 0 ? 'ok' : 'bad');
+
+  const tb = $('tbody');
+  tb.replaceChildren();
+  if (!registros.length) {
+    const tr = document.createElement('tr');
+    const td = cel(tr, 'Nenhum plantio registrado ainda.', 'empty');
+    td.colSpan = 9;
+    tb.append(tr);
+  }
+  registros.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    cel(tr, r.nome);
+    cel(tr, r.data || '');
+    cel(tr, fmt(r.quantidade));
+    cel(tr, fmt(r.custoTotal));
+    cel(tr, r.cidade || '');
+    cel(tr, r.finalizado ? 'Finalizado' : 'Em cultivo');
+    cel(tr, r.finalizado ? fmt(r.vendido) : '-');
+    cel(tr, r.finalizado ? fmt(saldo(r)) : '-', r.finalizado ? (saldo(r) >= 0 ? 'ok' : 'bad') : '');
+    const td = document.createElement('td');
+    if (!r.finalizado) td.append(botao('Colher', () => colher(i)), ' ');
+    td.append(botao('Excluir', () => { if (confirm('Excluir este plantio?')) { registros.splice(i, 1); salvar(); render(); } }));
+    tr.append(td);
+    tb.append(tr);
+  });
+  desenhar(fin);
+}
+
+function desenhar(fin) {
+  if (!window.Chart) return;
+  graficos.forEach(g => g.destroy());
+  Chart.defaults.color = '#93a3b8';
+  Chart.defaults.borderColor = '#243247';
+  const porDia = {}, porCultura = {};
+  fin.forEach(r => {
+    const dia = (r.finalizadoEm || r.criadoEm || '').slice(0, 10) || 'sem data';
+    porDia[dia] = (porDia[dia] || 0) + saldo(r);
+    porCultura[r.nome] = (porCultura[r.nome] || 0) + saldo(r);
+  });
+  const dias = Object.keys(porDia).sort();
+  let acc = 0;
+  const opt = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
+  graficos = [
+    new Chart($('gDia'), { type: 'line', data: { labels: dias, datasets: [{ data: dias.map(d => acc += porDia[d]), borderColor: '#efc56b', backgroundColor: 'rgba(239,197,107,.15)', fill: true, tension: .3 }] }, options: opt }),
+    new Chart($('gCultura'), { type: 'bar', data: { labels: Object.keys(porCultura), datasets: [{ data: Object.values(porCultura), backgroundColor: Object.values(porCultura).map(v => v >= 0 ? '#73dfb0' : '#ff8798'), borderRadius: 6 }] }, options: opt })
+  ];
+}
+
+$('formPlantio').onsubmit = e => {
+  e.preventDefault();
+  const qtd = Number($('fQtd').value), custo = Number($('fCusto').value);
+  if (!(qtd > 0) || !(custo >= 0)) return;
+  registros.push({
+    id: Date.now(), nome: $('fCultura').value, quantidade: qtd, custoTotal: qtd * custo,
+    cidade: $('fCidade').value, data: new Date().toLocaleDateString('pt-BR'),
+    criadoEm: new Date().toISOString(), vendido: 0, taxas: 0, finalizado: false
+  });
+  salvar(); e.target.reset(); render(); abrir('painel');
+};
+
+function colher(i) {
+  atual = i;
+  $('hTitulo').textContent = 'Colheita: ' + registros[i].nome;
+  $('formColheita').reset();
+  abrir('colheita');
+}
+$('formColheita').onsubmit = e => {
+  e.preventDefault();
+  const r = registros[atual];
+  if (!r) return;
+  r.vendido = Number($('cQtd').value) * Number($('cPreco').value);
+  r.colhido = Number($('cQtd').value);
+  r.taxas = Number($('cTaxas').value);
+  r.finalizado = true;
+  r.finalizadoEm = new Date().toISOString();
+  salvar(); render(); abrir('painel');
+};
+
+$('btnExport').onclick = () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(registros, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ilha-backup.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('fileImport').onchange = async e => {
+  const input = e.target;
+  try {
+    const f = input.files[0];
+    if (!f) return;
+    const dados = JSON.parse(await f.text());
+    const valido = Array.isArray(dados) && dados.every(r => r && typeof r.nome === 'string' && Number.isFinite(Number(r.custoTotal)) && Number.isFinite(Number(r.quantidade)));
+    if (!valido) throw new Error('arquivo fora do formato esperado');
+    if (!confirm('Substituir os registros atuais pelo backup?')) return;
+    registros = dados; leituraOk = true; salvar(); render(); abrir('painel');
+  } catch (err) {
+    alert('Não foi possível importar: ' + err.message);
+  } finally { input.value = ''; }
+};
+
+function preco(v) { return Number(v) > 0 ? Number(v).toLocaleString('pt-BR') : 'Sem dados'; }
+function quando(s) {
+  if (!s || s.startsWith('0001')) return 'Sem data';
+  const d = new Date(/(Z|[+-]\d\d:\d\d)$/.test(s) ? s : s + 'Z');
+  if (isNaN(d)) return 'Sem data';
+  return d.toLocaleString('pt-BR') + (Date.now() - d.getTime() > 86400000 ? ' (antigo)' : '');
+}
+$('btnPrecos').onclick = async () => {
+  const btn = $('btnPrecos'), st = $('pStatus');
+  const cidade = $('pCidade').value, servidor = $('pServidor').value;
+  btn.disabled = true; st.className = 'muted'; st.textContent = 'Consultando...';
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const ids = PLANTAS.flatMap(p => [p[1], p[2]]).join(',');
+    const url = 'https://' + servidor + '.albion-online-data.com/api/v2/stats/prices/' + ids + '.json?locations=' + encodeURIComponent(cidade) + '&qualities=1';
+    const r = await fetch(url, { signal: ctl.signal });
+    if (!r.ok) throw new Error(r.status === 429 ? 'limite da API atingido, aguarde um pouco' : 'HTTP ' + r.status);
+    const dados = await r.json();
+    if (!Array.isArray(dados)) throw new Error('resposta inesperada');
+    const mapa = new Map(dados.filter(x => x.city === cidade).map(x => [x.item_id, x]));
+    const tb = $('pBody');
+    tb.replaceChildren();
+    PLANTAS.forEach(([nome, prod, sem]) => {
+      const p = mapa.get(prod) || {}, s = mapa.get(sem) || {};
+      const tr = document.createElement('tr');
+      cel(tr, nome); cel(tr, preco(s.sell_price_min)); cel(tr, preco(p.sell_price_min)); cel(tr, preco(p.buy_price_max)); cel(tr, quando(p.sell_price_min_date));
+      tb.append(tr);
+    });
+    st.textContent = 'Consulta feita em ' + new Date().toLocaleString('pt-BR') + '.';
+  } catch (err) {
+    st.className = 'err';
+    st.textContent = err.name === 'AbortError' ? 'A API demorou demais. Tente de novo.' : 'Não foi possível consultar: ' + err.message + '.';
+  } finally { clearTimeout(t); btn.disabled = false; }
+};
+
+render();
+</script>
+</body>
+</html>
