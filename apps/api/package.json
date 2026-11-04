@@ -2,10 +2,12 @@
   "name": "@ac/api",
   "private": true,
   "type": "module",
+  "engines": {"node": ">=22"},
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc",
-    "start": "node --env-file=.env dist/server.js"
+    "start": "node dist/server.js",
+    "start:local": "node --env-file=.env dist/server.js"
   },
   "dependencies": {
     "express": "^4.21.0",
