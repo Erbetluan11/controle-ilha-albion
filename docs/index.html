@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle da Ilha — Albion Online</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#12141c;color:#e8e8e8}
+header{background:#1b1f2b;padding:16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+h1{margin:0;font-size:20px;color:#ffd35c}
+nav a{color:#cfd6ff;text-decoration:none;margin-right:14px}
+nav a:hover{color:#ffd35c}
+main{padding:20px;max-width:1100px;margin:auto}
+.card{background:#1b1f2b;padding:18px;border-radius:12px;margin-bottom:18px}
+table{width:100%;border-collapse:collapse;background:#1b1f2b;border-radius:10px;overflow:hidden}
+th,td{padding:10px;border-bottom:1px solid #2b3040;text-align:left}
+th{background:#232838;color:#ffd35c}
+.positivo{color:#6ee787;font-weight:bold}
+.negativo{color:#ff7b72;font-weight:bold}
+input,select,button{padding:10px;border-radius:8px;border:1px solid #39415a;background:#232838;color:#fff}
+button{background:#ffd35c;color:#12141c;font-weight:bold;cursor:pointer;border:none}
+form{display:grid;gap:10px;max-width:520px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+<h1>Controle da Ilha</h1>
+<nav>
+<a href="#" onclick="mostrar('inicio')">Início</a>
+<a href="#" onclick="mostrar('novo')">Novo plantio</a>
+<a href="#" onclick="mostrar('precos')">Melhores preços</a>
+<a href="#" onclick="exportar()">Exportar</a>
+<label style="color:#cfd6ff">Importar <input type="file" id="importar" accept=".json" onchange="importar(this)"></label>
+</nav>
+</header>
+
+<main>
+<section id="inicio">
+<div class="card">
+<h2>Resumo</h2>
+<p>Investido: <strong id="investido">0</strong> pratas</p>
+<p>Recebido: <strong id="recebido">0</strong> pratas</p>
+<p>Lucro líquido: <strong id="lucroTotal">0</strong> pratas</p>
+</div>
+
+<div class="card"><h2>Lucro por dia</h2><canvas id="graficoDias" height="120"></canvas></div>
+<div class="card"><h2>Lucro por planta</h2><canvas id="graficoPlantas" height="120"></canvas></div>
+
+<div class="card">
+<h2>Plantios</h2>
+<table>
+<thead><tr><th>Data</th><th>Planta</th><th>Sementes</th><th>Custo</th><th>Cidade</th><th>Colhido</th><th>Vendido</th><th>Lucro</th><th>Ações</th></tr></thead>
+<tbody id="tabelaPlantios"></tbody>
+</table>
+</div>
+</section>
+
+<section id="novo" style="display:none">
+<div class="card">
+<h2>Novo plantio</h2>
+<form onsubmit="salvarPlantio(event)">
+<label>Planta</label>
+<select id="planta" onchange="atualizarSemente()"></select>
+<label>ID da semente</label>
+<input id="semente" required>
+<label>Quantidade de sementes</label>
+<input id="quantidade" type="number" min="1" required>
+<label>Custo por semente</label>
+<input id="custoUnitario" type="number" step="0.01" required>
+<label>Cidade</label>
+<select id="cidade"></select>
+<button>Salvar plantio</button>
+</form>
+</div>
+</section>
+
+<section id="colher" style="display:none">
+<div class="card">
+<h2>Registrar colheita</h2>
+<p id="infoColheita"></p>
+<form onsubmit="salvarColheita(event)">
+<label>Quantidade colhida</label>
+<input id="colhido" type="number" min="0" required>
+<label>Preço de venda por unidade</label>
+<input id="precoUnitario" type="number" step="0.01" required>
+<button>Salvar colheita</button>
+</form>
+</div>
+</section>
+
+<section id="precos" style="display:none">
+<div class="card">
+<h2>Melhores plantações</h2>
+<div class="row">
+<select id="cidadePrecos"></select>
+<button onclick="carregarPrecos()">Atualizar preços</button>
+</div>
+</div>
+<div class="card">
+<table>
+<thead><tr><th>Planta</th><th>Semente</th><th>Recurso</th><th>Rendimento</th><th>Receita</th><th>Lucro</th></tr></thead>
+<tbody id="tabelaPrecos"></tbody>
+</table>
+</div>
+</section>
+</main>
+
+<script>
+const CIDADES=["Thetford","Fort Sterling","Lymhurst","Bridgewatch","Martlock","Caerleon","Brecilien","Black Market"];
+const PLANTAS=[
+{seed:"T1_FARM_CARROT_SEED",crop:"T1_CARROT",nome:"Cenoura",rendimento:18},
+{seed:"T2_FARM_BEAN_SEED",crop:"T2_BEANS",nome:"Feijão",rendimento:12},
+{seed:"T3_FARM_WHEAT_SEED",crop:"T3_WHEAT",nome:"Trigo",rendimento:9},
+{seed:"T4_FARM_TURNIP_SEED",crop:"T4_TURNIP",nome:"Nabo",rendimento:9},
+{seed:"T4_FARM_BURDOCK_SEED",crop:"T4_BURDOCK",nome:"Bardana",rendimento:9},
+{seed:"T5_FARM_CABBAGE_SEED",crop:"T5_CABBAGE",nome:"Repolho",rendimento:9},
+{seed:"T5_FARM_TEASEL_SEED",crop:"T5_TEASEL",nome:"Cardo-dragão",rendimento:9},
+{seed:"T6_FARM_POTATO_SEED",crop:"T6_POTATO",nome:"Batata",rendimento:9}
+];
+
+let plantios=JSON.parse(localStorage.getItem("plantios")||"[]");
+let plantioAtual=null;
+let graficoDias=null,graficoPlantas=null;
+
+function salvar(){localStorage.setItem("plantios",JSON.stringify(plantios))}
+function mostrar(id){["inicio","novo","colher","precos"].forEach(x=>document.getElementById(x).style.display=x===id?"block":"none")}
+function moeda(v){return Number(v||0).toLocaleString("pt-BR")}
+
+function iniciar(){
+const planta=document.getElementById("planta");
+const cidade=document.getElementById("cidade");
+const cidadePrecos=document.getElementById("cidadePrecos");
+PLANTAS.forEach(p=>{planta.innerHTML+=`<option value="${p.nome}">${p.nome}</option>`});
+CIDADES.forEach(c=>{cidade.innerHTML+=`<option>${c}</option>`;cidadePrecos.innerHTML+=`<option>${c}</option>`});
+atualizarSemente();renderizar()}
+
+function atualizarSemente(){
+const p=PLANTAS.find(x=>x.nome===document.getElementById("planta").value);
+document.getElementById("semente").value=p.seed}
+
+function salvarPlantio(e){
+e.preventDefault();
+const nome=document.getElementById("planta").value;
+const p=PLANTAS.find(x=>x.nome===nome);
+plantios.push({
+id:Date.now(),nome,semente:document.getElementById("semente").value,
+quantidade:+document.getElementById("quantidade").value,
+custoTotal:+document.getElementById("quantidade").value*+document.getElementById("custoUnitario").value,
+cidade:document.getElementById("cidade").value,
+data:new Date().toLocaleString("pt-BR"),colhido:0,vendido:0,finalizado:false
+});
+salvar();mostrar("inicio");renderizar()}
+
+function abrirColheita(id){
+plantioAtual=plantios.find(p=>p.id===id);
+document.getElementById("infoColheita").innerText=`${plantioAtual.nome} — ${plantioAtual.quantidade} sementes`;
+mostrar("colher")}
+
+function salvarColheita(e){
+e.preventDefault();
+plantioAtual.colhido=+document.getElementById("colhido").value;
+plantioAtual.vendido=plantioAtual.colhido*+document.getElementById("precoUnitario").value;
+plantioAtual.finalizado=true;
+salvar();mostrar("inicio");renderizar()}
+
+function excluir(id){plantios=plantios.filter(p=>p.id!==id);salvar();renderizar()}
+
+function renderizar(){
+const tbody=document.getElementById("tabelaPlantios");
+tbody.innerHTML="";
+let investido=0,recebido=0,lucroTotal=0;
+plantios.forEach(p=>{
+investido+=p.custoTotal;recebido+=p.vendido;
+const lucro=p.vendido-p.custoTotal;
+if(p.finalizado)lucroTotal+=lucro;
+tbody.innerHTML+=`<tr><td>${p.data}</td><td>${p.nome}</td><td>${p.quantidade}</td><td>${moeda(p.custoTotal)}</td><td>${p.cidade}</td><td>${p.colhido}</td><td>${moeda(p.vendido)}</td><td class="${lucro>=0?"positivo":"negativo"}">${moeda(lucro)}</td><td>${p.finalizado?"":`<button onclick="abrirColheita(${p.id})">Colher</button> `}<button onclick="excluir(${p.id})">Excluir</button></td></tr>`});
+document.getElementById("investido").innerText=moeda(investido);
+document.getElementById("recebido").innerText=moeda(recebido);
+document.getElementById("lucroTotal").innerText=moeda(lucroTotal);
+atualizarGraficos()}
+
+function atualizarGraficos(){
+const porDia={},porPlanta={},custo={},receita={};
+plantios.forEach(p=>{
+const dia=(p.data||"").split(",")[0];
+const lucro=p.vendido-p.custoTotal;
+if(p.finalizado)porDia[dia]=(porDia[dia]||0)+lucro;
+porPlanta[p.nome]=(porPlanta[p.nome]||0)+lucro;
+custo[p.nome]=(custo[p.nome]||0)+p.custoTotal;
+receita[p.nome]=(receita[p.nome]||0)+p.vendido});
+const dias=Object.keys(porDia).sort();
+const plantas=Object.keys(porPlanta);
+if(graficoDias)graficoDias.destroy();
+if(graficoPlantas)graficoPlantas.destroy();
+graficoDias=new Chart(document.getElementById("graficoDias"),{type:"line",data:{labels:dias,datasets:[{label:"Lucro por dia",data:dias.map(d=>porDia[d]),borderColor:"#ffd35c",backgroundColor:"rgba(255,211,92,.2)",fill:true,tension:.3}]},options:{plugins:{legend:{labels:{color:"#e8e8e8"}}},scales:{x:{ticks:{color:"#cfd6ff"},grid:{color:"#2b3040"}},y:{ticks:{color:"#cfd6ff"},grid:{color:"#2b3040"}}}}});
+graficoPlantas=new Chart(document.getElementById("graficoPlantas"),{type:"bar",data:{labels:plantas,datasets:[{label:"Receita",data:plantas.map(p=>receita[p]),backgroundColor:"#6ee787"},{label:"Custo",data:plantas.map(p=>custo[p]),backgroundColor:"#ff7b72"},{label:"Lucro",data:plantas.map(p=>porPlanta[p]),backgroundColor:"#ffd35c"}]},options:{plugins:{legend:{labels:{color:"#e8e8e8"}}},scales:{x:{ticks:{color:"#cfd6ff"},grid:{color:"#2b3040"}},y:{ticks:{color:"#cfd6ff"},grid:{color:"#2b3040"}}}}})}
+
+async function preco(item,cidade){
+try{const r=await fetch(`https://west.albion-online-data.com/api/v2/stats/prices/${item}?locations=${encodeURIComponent(cidade)}`);
+const d=await r.json();const x=d.find(i=>i.city===cidade);return x?(x.sell_price_min||0):0}catch(e){return 0}}
+
+async function carregarPrecos(){
+const cidade=document.getElementById("cidadePrecos").value;
+const tbody=document.getElementById("tabelaPrecos");
+tbody.innerHTML="<tr><td colspan='6'>Carregando...</td></tr>";
+const linhas=[];
+for(const p of PLANTAS){
+const semente=await preco(p.seed,cidade);
+const recurso=await preco(p.crop,cidade);
+const receita=recurso*p.rendimento;
+const lucro=receita-semente;
+linhas.push({nome:p.nome,semente,recurso,rendimento:p.rendimento,receita,lucro})}
+linhas.sort((a,b)=>b.lucro-a.lucro);
+tbody.innerHTML=linhas.map(l=>`<tr><td>${l.nome}</td><td>${moeda(l.semente)}</td><td>${moeda(l.recurso)}</td><td>${l.rendimento}</td><td>${moeda(l.receita)}</td><td class="${l.lucro>=0?"positivo":"negativo"}">${moeda(l.lucro)}</td></tr>`).join("")}
+
+function exportar(){
+const blob=new Blob([JSON.stringify(plantios,null,2)],{type:"application/json"});
+const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="controle-ilha.json";a.click()}
+
+function importar(input){
+const arquivo=input.files[0];if(!arquivo)return;
+const leitor=new FileReader();
+leitor.onload=()=>{plantios=JSON.parse(leitor.result);salvar();renderizar()};
+leitor.readAsText(arquivo)}
+
+iniciar();
+</script>
+</body>
+</html>
